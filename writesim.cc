@@ -1,15 +1,17 @@
-#define _GNU_SOURCE
+#include <cassert>
+#include <cstdlib>
+#include <cstdint>
+#include <cstdio>
+#include <cstring>
+#include <ctime>
+#include <string>
 
-#include <assert.h>
 #include <libgen.h>
-#include <pthread.h>
-#include <stdbool.h>
-#include <stdint.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <time.h>
 #include <unistd.h>
+
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
 
 #include "fs-helpers.h"
 
@@ -19,12 +21,11 @@
 #define GBYTE 1073741824ULL
 
 int num_files = DEFAULT_NUM_FILES;
-size_t max_filesize = MAX_FILESIZE;
+off_t max_filesize = MAX_FILESIZE;
 char *stemname = NULL;
 int num_gbytes = -1;
 int rewrite_percent = DEFAULT_REWRITE_PERCENT;
 
-pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
 int64_t data_written = 0;
 
 enum {
@@ -39,6 +40,7 @@ enum {
 struct writer_args {
 	int lower;
 	int higher;
+	int i;
 };
 
 void usage(int argc, char *argv[])
@@ -57,30 +59,46 @@ void clean_files()
 	}
 }
 
-void *writer(void *args)
+int64_t writer_1(void *args)
 {
-	struct writer_args *range = args;
+	int64_t result = 0;
+	writer_args *range = static_cast<writer_args *>(args);
 	assert(range != NULL);
 
-	for(int i=range->lower; i<range->higher; ++i) {
-		char *n = NULL;
-		int j = i;
-		size_t filesz = rand() % max_filesize;
+loop:
+	if (range->i >= range->higher)
+		return result;
 
-		if (i > 0 && (rand() % 100) < rewrite_percent) {
-			j = range->lower + (rand() % (i-range->lower));
-		}
+	char *n = NULL;
+	int j = range->i;
+	off_t filesz = rand() % max_filesize;
 
-		asprintf(&n, "%s_%d", stemname, j);
-		writeFile(n, filesz);
-		free(n); n = NULL;
-
-		pthread_mutex_lock(&lock);
-		data_written += filesz;
-		pthread_mutex_unlock(&lock);
+	if (j > 0 && (rand() % 100) < rewrite_percent) {
+		j = range->lower + (rand() % (j-range->lower));
 	}
 
-	return NULL;
+	asprintf(&n, "%s_%d", stemname, j);
+	FSHelpers::JournalledFile jf(n);
+	jf.writeFile(filesz);
+	free(n); n = NULL;
+
+	result += filesz;
+	++range->i;
+	goto loop;
+
+	return result;
+}
+
+void syncfs()
+{
+	char *n = NULL;
+	int fd;
+
+	asprintf(&n, "%s_%d", stemname, 0);
+	fd = open(n, 0);
+	assert(fd != -1);
+	syncfs(fd);
+	free(n); n = NULL;
 }
 
 int main(int argc, char *argv[])
@@ -104,36 +122,27 @@ int main(int argc, char *argv[])
 		max_filesize = atoi(argv[ARG_POS_MAX_FILESIZE]);
 	}
 
-	struct timespec time_n0, starttime;
+	struct timespec starttime;
 	clock_gettime(CLOCK_REALTIME, &starttime);
-	srand(starttime.tv_nsec);
-	memcpy(&time_n0, &starttime, sizeof(struct timespec));
+	//srand(starttime.tv_nsec);
+	srand(0xaa55);
 
 	for(int cycles=1; ; ++cycles) {
 		clean_files();
-		struct writer_args args = {0, num_files};
-		pthread_t tid;
-		pthread_create(&tid, NULL, writer, &args);
-#if 0
-		while (true) {
-			struct timespec time_n1;
-			clock_gettime(CLOCK_REALTIME, &time_n1);
-			if (time_n1.tv_sec > time_n0.tv_sec) {
-				memcpy(&time_n0, &time_n1, sizeof(struct timespec));
-				printf("Wrote %llu%% of %d GB\n", data_written*100 / ((int64_t) num_gbytes * GBYTE), num_gbytes);
-			}
+		struct writer_args args = {0, num_files, 0};
+		data_written += writer_1(&args);
+		printf("Wrote %llu%% of %d GB\n", data_written*100 / ((int64_t) num_gbytes * GBYTE), num_gbytes);
 
-			if (data_written >= (int64_t) num_gbytes * GBYTE) {
-				goto out;
-			}
+		if (data_written >= (int64_t) num_gbytes * GBYTE) {
+			goto out;
 		}
-#endif
-		pthread_join(tid, NULL);
 		printf("Completed %d cycles\n", cycles);
 	} while (true);
 
 	struct timespec endtime;
 out:
+	syncfs();
+
 	clock_gettime(CLOCK_REALTIME, &endtime);
 	printf("Throughput: %.2lf Mbytes/s\n", (double)(num_gbytes * 1024) / (endtime.tv_sec - starttime.tv_sec));
 

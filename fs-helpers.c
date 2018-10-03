@@ -1,5 +1,3 @@
-#define _GNU_SOURCE
-
 #include <assert.h>
 #include <fcntl.h>
 #include <libgen.h>
@@ -16,7 +14,7 @@ static char *get_randbuf()
 	static char *randbuf = NULL;
 
 	if (randbuf == NULL) {
-		randbuf = malloc(BUFLEN);
+		randbuf = (char *) malloc(BUFLEN);
 		int urand = open("/dev/urandom", 0, O_RDONLY);
 		assert(urand != -1);
 		size_t off = 0;
@@ -32,7 +30,7 @@ static char *get_randbuf()
 int renameAndSync(const char *oldpath, const char *newpath)
 {
 	int r = rename(oldpath, newpath);
-#ifdef USE_FSYNC
+#ifdef USE_DIR_FSYNC
 	if (r != -1) {
 		int d = open(dirname((char *) newpath), O_DIRECTORY);
 		assert(d != -1);
@@ -61,7 +59,7 @@ void writeFile_(const char *path, size_t len)
 	}
 	fflush(f);
 
-#ifdef USE_FSYNC
+#ifdef USE_FILE_FSYNC
 	fsync(fileno(f));
 #endif
 	fclose(f);
