@@ -1,2 +1,7 @@
 t_*
 writesim
+test
+write1
+writesim.arm
+gtest-all.o
+libgtest.a
