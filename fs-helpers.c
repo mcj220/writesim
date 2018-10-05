@@ -75,14 +75,14 @@ int ensureFileConsistency(const char *path)
 
 	if (access(firstpath, R_OK|W_OK) == 0) {
 		printf("Write to file %s was interrupted! Deleting uncommitted first write...\n", path);
-		unlink(firstpath);
+		unlink(firstpath); // No fsync!!
 		return exists;
 	}
 
 	if (access(newpath, R_OK|W_OK) == 0) {
 		if (exists) {
 			printf("Write to file %s was interrupted! Deleting uncommitted new write...\n", path);
-			unlink(newpath);
+			unlink(newpath); // No fsync!!
 			return 1;
 		}
 		printf("Write to file %s was interrupted! Keeping committed new write...\n", path);

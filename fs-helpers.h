@@ -12,10 +12,6 @@
 #include <libgen.h>
 #include <unistd.h>
 
-//#define USE_FALLOCATE
-#define USE_FILE_FSYNC
-#define USE_DIR_FSYNC
-
 namespace FSHelpers {
 
 static const off_t BUFLEN = 1024*1024;
@@ -42,9 +38,6 @@ static inline const void writeFile_(const std::string &path, off_t len)
 {
 	FILE *f = fopen(path.c_str(), "w");
 	assert(f != NULL);
-#ifdef USE_FALLOCATE
-	fallocate(fileno(f), 0, 0, len);
-#endif
 	while (len > 0) {
 		off_t towrite = len > BUFLEN ? BUFLEN : len;
 		int r = fwrite(get_randbuf(), towrite, 1, f);
@@ -52,9 +45,7 @@ static inline const void writeFile_(const std::string &path, off_t len)
 		len -= towrite;
 	}
 	fflush(f);
-#ifdef USE_FILE_FSYNC
 	fsync(fileno(f));
-#endif
 	fclose(f);
 }
 
@@ -66,12 +57,16 @@ static inline bool exists(const std::string &path)
 enum class JournalState {
 	None,
 	First,
-	New
+	New,
+	Inconsistent
 };
 
 static inline std::ostream &operator<<(std::ostream &os, const JournalState state)
 {
-	os << (state == JournalState::First ? "first" : state == JournalState::New ? "new" : "none");
+	os << (state == JournalState::First ? "first" :
+			state == JournalState::New ? "new" :
+				state == JournalState::Inconsistent ? "illegal" :
+					"none");
 	return os;
 }
 
@@ -87,35 +82,36 @@ private:
 	JournalState getJournalState() const
 	{
 		return exists(firstPath()) ?
-			JournalState::First :
-			exists(newPath()) ? JournalState::New : JournalState::None;
+			(exists(newPath()) ? JournalState::Inconsistent :
+				JournalState::First) :
+				exists(newPath()) ? JournalState::New :
+					JournalState::None;
 	}
 
 	bool hasData() const { return exists(getPath()); }
-	bool isClosedJournal() const { return !hasData(); }
-	bool isDirty() const { return getJournalState() == JournalState::First || getJournalState() == JournalState::New; }
-	bool isRecoverable() const { return isClosedJournal() && getJournalState() == JournalState::New; }
+	bool isJournalClosed() const { return !hasData(); }
+	bool isJournalDirty() const { return getJournalState() != JournalState::None; }
+	bool isJournalConsistent() const { return getJournalState() != JournalState::Inconsistent; }
+	bool isJournalRecoverable() const { return isJournalClosed() && getJournalState() == JournalState::New; }
 
 private:
 	void move(const std::string &path)
 	{
 		::rename(path.c_str(), getPath().c_str());
-#ifdef USE_DIR_FSYNC
 		char *dir = dirname(strdupa(getPath().c_str()));
 		int d = open(dir, O_DIRECTORY);
 		if (d == -1) throw std::runtime_error("Can't open directory");
 		if (fsync(d) == -1) throw std::runtime_error("fsync failed");
 		::close(d);
-#endif
 	}
 
 	void printStatus() const
 	{
-		if (isRecoverable()) {
+		if (isJournalRecoverable()) {
 			std::cout << "Write to file " << getPath() <<
 				" was interrupted! Keeping recoverable new write..." <<
 				std::endl;
-		} else if (isDirty()) {
+		} else if (isJournalDirty()) {
 			std::cout << "Write to file " << getPath() <<
 				" was interrupted! Deleting unrecoverable " <<
 				getJournalState() << " write..." << std::endl;
@@ -131,13 +127,13 @@ private:
 
 public:
 	const std::string getJournalPath() const { return hasData() ? newPath() : firstPath(); }
-	void closeJournal() { ::remove(getPath().c_str()); }
+	void finalizeJournal() { ::remove(getPath().c_str()); }
 
 	void replayJournal()
 	{
 		printStatus();
 
-		if (isRecoverable()) {
+		if (isJournalRecoverable()) {
 			commit();
 		}
 
@@ -146,7 +142,9 @@ public:
 
 	void commit()
 	{
-		if (!isDirty()) throw std::runtime_error("Nothing to commit");
+		assert(isJournalDirty());
+		assert(isJournalConsistent());
+		finalizeJournal();
 		if (getJournalState() == JournalState::New) {
 			move(newPath());
 		} else {
@@ -158,7 +156,6 @@ public:
 	{
 		replayJournal();
 		writeFile_(getJournalPath(), len);
-		closeJournal();
 		commit();
 	}
 
