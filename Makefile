@@ -6,6 +6,8 @@ TEST_SRC := fs-helpers-test.cc $(GTEST_DIR)/src/gtest_main.cc
 
 TARGETS := writesim write1 test
 
+CXXFLAGS += -std=c++11
+
 .DEFAULT_GOAL := all
 
 .phony: all
