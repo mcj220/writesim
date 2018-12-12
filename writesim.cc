@@ -4,6 +4,8 @@
 #include <cstdio>
 #include <cstring>
 #include <ctime>
+#include <iostream>
+#include <sstream>
 #include <string>
 
 #include <libgen.h>
@@ -27,8 +29,6 @@ char *stemname = NULL;
 int num_mbytes = -1;
 int rewrite_percent = DEFAULT_REWRITE_PERCENT;
 
-int64_t data_written = 0;
-
 enum {
 	ARG_POS_BASENAME = 1,
 	ARG_POS_NUM_MBYTES,
@@ -38,69 +38,46 @@ enum {
 	MAX_ARG_POS
 };
 
-struct writer_args {
-	int lower;
-	int higher;
-	int i;
-};
+namespace {
+	static void usage(int argc, char *argv[])
+	{
+		fprintf(stderr, "Usage: %s <stemname> <num_mbytes> [<target_rewrite_percent> <num_files> <max_filesize>]\n", basename(argv[0]));
+		exit(EXIT_FAILURE);
+	}
 
-void usage(int argc, char *argv[])
-{
-	fprintf(stderr, "Usage: %s <stemname> <num_mbytes> [<target_rewrite_percent> <num_files> <max_filesize>]\n", basename(argv[0]));
-	exit(EXIT_FAILURE);
-}
+	static std::string make_fname(const std::string &stem, int i)
+	{
+		std::stringstream ss;
+		ss << stem << '_' << i;
+		return ss.str();
+	}
 
-void clean_files()
-{
-	for(int i=0; i<num_files; ++i) {
+	static void syncall()
+	{
 		char *n = NULL;
-		asprintf(&n, "%s_%d", stemname, i);
-		unlink(n);
-		free(n);
-	}
-}
+		int fd;
 
-int64_t writer_1(void *args)
-{
-	int64_t result = 0;
-	writer_args *range = static_cast<writer_args *>(args);
-	assert(range != NULL);
-
-loop:
-	if (range->i >= range->higher)
-		return result;
-
-	char *n = NULL;
-	int j = range->i;
-	off_t filesz = rand() % max_filesize;
-
-	if (j > 0 && (rand() % 100) < rewrite_percent) {
-		j = range->lower + (rand() % (j-range->lower));
+		asprintf(&n, "%s_%d", stemname, 0);
+		fd = open(n, 0);
+		assert(fd != -1);
+		::syncfs(fd);
+		free(n); n = NULL;
 	}
 
-	asprintf(&n, "%s_%d", stemname, j);
-	FSHelpers::JournalledFile jf(n);
-	jf.writeFile(filesz);
-	free(n); n = NULL;
+	static void write_initial_set(int nfiles)
+	{
+		int64_t data_written = 0;
+		for(int i=0; i < nfiles; ++i) {
+			off_t filesz = rand() % max_filesize;
 
-	result += filesz;
-	++range->i;
-	goto loop;
+			FSHelpers::JournalledFile jf(make_fname(stemname, i));
+			jf.writeFile(filesz);
 
-	return result;
-}
-
-void syncfs()
-{
-	char *n = NULL;
-	int fd;
-
-	asprintf(&n, "%s_%d", stemname, 0);
-	fd = open(n, 0);
-	assert(fd != -1);
-	syncfs(fd);
-	free(n); n = NULL;
-}
+			data_written += filesz;
+		}
+		std::cout << "Wrote initial " << (float) data_written / MBYTE << "MB" << std::endl;
+	}
+} // namespace
 
 int main(int argc, char *argv[])
 {
@@ -128,21 +105,23 @@ int main(int argc, char *argv[])
 	//srand(starttime.tv_nsec);
 	srand(0xaa55);
 
-	for(int cycles=1; ; ++cycles) {
-		clean_files();
-		struct writer_args args = {0, num_files, 0};
-		data_written += writer_1(&args);
-		printf("Wrote %llu%% of %d MB\n", data_written*100 / ((int64_t) num_mbytes * MBYTE), num_mbytes);
+	write_initial_set(num_files);
+	for(int data_written=0, cycle=0; data_written < (int64_t) num_mbytes * MBYTE; ) {
+		for(int i=0; i < num_files * rewrite_percent / 100; ++i) {
+			off_t filesz = rand() % max_filesize;
 
-		if (data_written >= (int64_t) num_mbytes * MBYTE) {
-			goto out;
+			int j = rand() % num_files;
+			FSHelpers::JournalledFile jf(make_fname(stemname, j));
+			jf.writeFile(filesz);
+
+			data_written += filesz;
 		}
-		printf("Completed %d cycles\n", cycles);
-	} while (true);
+		std::cout << "Wrote " << (float) data_written / MBYTE << "MB" << std::endl;
+		std::cout << "Completed " << cycle++ << " cycles" << std::endl;
+	}
 
 	struct timespec endtime;
-out:
-	syncfs();
+	syncall();
 
 	clock_gettime(CLOCK_REALTIME, &endtime);
 	printf("Throughput: %.2lf Mbytes/s\n", (double)(num_mbytes * 1024) / (endtime.tv_sec - starttime.tv_sec));

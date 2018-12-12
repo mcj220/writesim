@@ -15,7 +15,7 @@ for(<>) {
 		};
 	} else {
 		# $ blkparse -f"%d %n %S %C\n" ... <device>
-		last if (@fields != 3);
+		last if (@fields != 4);
 		if ($fields[0] =~ /W/) {
 			my $addr = $fields[2];
 			my $nblocks = $fields[1];
