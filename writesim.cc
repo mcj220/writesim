@@ -17,20 +17,21 @@
 
 #define MAX_FILESIZE 262144
 #define DEFAULT_REWRITE_PERCENT 10
-#define DEFAULT_NUM_FILES 1024
+#define DEFAULT_NUM_FILES 10
+#define MBYTE 1048576ULL
 #define GBYTE 1073741824ULL
 
 int num_files = DEFAULT_NUM_FILES;
 off_t max_filesize = MAX_FILESIZE;
 char *stemname = NULL;
-int num_gbytes = -1;
+int num_mbytes = -1;
 int rewrite_percent = DEFAULT_REWRITE_PERCENT;
 
 int64_t data_written = 0;
 
 enum {
 	ARG_POS_BASENAME = 1,
-	ARG_POS_NUM_GBYTES,
+	ARG_POS_NUM_MBYTES,
 	ARG_POS_TARGET_REWRITE_PERCENT,
 	ARG_POS_NUM_FILES,
 	ARG_POS_MAX_FILESIZE,
@@ -45,7 +46,7 @@ struct writer_args {
 
 void usage(int argc, char *argv[])
 {
-	fprintf(stderr, "Usage: %s <stemname> <num_gbytes> [<target_rewrite_percent> <num_files> <max_filesize>]\n", basename(argv[0]));
+	fprintf(stderr, "Usage: %s <stemname> <num_mbytes> [<target_rewrite_percent> <num_files> <max_filesize>]\n", basename(argv[0]));
 	exit(EXIT_FAILURE);
 }
 
@@ -108,7 +109,7 @@ int main(int argc, char *argv[])
 	}
 
 	stemname = argv[ARG_POS_BASENAME];
-	num_gbytes = atoi(argv[ARG_POS_NUM_GBYTES]);
+	num_mbytes = atoi(argv[ARG_POS_NUM_MBYTES]);
 
 	if (argc > ARG_POS_TARGET_REWRITE_PERCENT) {
 		rewrite_percent = atoi(argv[3]);
@@ -131,9 +132,9 @@ int main(int argc, char *argv[])
 		clean_files();
 		struct writer_args args = {0, num_files, 0};
 		data_written += writer_1(&args);
-		printf("Wrote %llu%% of %d GB\n", data_written*100 / ((int64_t) num_gbytes * GBYTE), num_gbytes);
+		printf("Wrote %llu%% of %d MB\n", data_written*100 / ((int64_t) num_mbytes * MBYTE), num_mbytes);
 
-		if (data_written >= (int64_t) num_gbytes * GBYTE) {
+		if (data_written >= (int64_t) num_mbytes * MBYTE) {
 			goto out;
 		}
 		printf("Completed %d cycles\n", cycles);
@@ -144,7 +145,7 @@ out:
 	syncfs();
 
 	clock_gettime(CLOCK_REALTIME, &endtime);
-	printf("Throughput: %.2lf Mbytes/s\n", (double)(num_gbytes * 1024) / (endtime.tv_sec - starttime.tv_sec));
+	printf("Throughput: %.2lf Mbytes/s\n", (double)(num_mbytes * 1024) / (endtime.tv_sec - starttime.tv_sec));
 
 	return 0;
 }
