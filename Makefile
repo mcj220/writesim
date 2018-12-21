@@ -1,25 +1,23 @@
 GTEST_DIR := ../googletest/googletest
 
-WRITESIM_SRC := writesim.cc
-WRITE1_SRC := write1.cc
-TEST_SRC := fs-helpers-test.cc $(GTEST_DIR)/src/gtest_main.cc
+WRITESIM_SRC := writesim.cc fs-helpers.cc
+TEST_SRC := journalled-file-test.cc fs-helpers.cc $(GTEST_DIR)/src/gtest_main.cc
 
-TARGETS := writesim write1 test
+HDR := fs-helpers.h journalled-file.h
 
-CXXFLAGS += -std=c++11
+TARGETS := writesim test
+
+CXXFLAGS += -std=c++14
 
 .DEFAULT_GOAL := all
 
 .phony: all
 all: $(TARGETS)
 
-writesim: $(WRITESIM_SRC) fs-helpers.h
+writesim: $(WRITESIM_SRC) $(HDR)
 	$(CXX) $(CXXFLAGS) $(LDFLAGS) $(WRITESIM_SRC) -o $@
 
-write1: $(WRITE1_SRC) fs-helpers.h
-	$(CXX) $(CXXFLAGS) $(LDFLAGS) $(WRITE1_SRC) -o $@
-
-test: $(TEST_SRC) fs-helpers.h libgtest.a
+test: $(TEST_SRC) $(HDR) libgtest.a
 	$(CXX) -isystem $(GTEST_DIR)/include -pthread $(TEST_SRC) libgtest.a -o $@
 
 libgtest.a:

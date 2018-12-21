@@ -8,6 +8,7 @@
 
 #include <gtest/gtest.h>
 #include "fs-helpers.h"
+#include "journalled-file.h"
 
 namespace {
 
