@@ -1,7 +1,7 @@
 GTEST_DIR := ../googletest/googletest
 
 WRITESIM_SRC := writesim.cc fs-helpers.cc
-TEST_SRC := journalled-file-test.cc fs-helpers.cc $(GTEST_DIR)/src/gtest_main.cc
+TEST_SRC := journalled-file-test.cc journalled-file.cc $(GTEST_DIR)/src/gtest_main.cc
 
 HDR := fs-helpers.h journalled-file.h
 
