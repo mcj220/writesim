@@ -8,7 +8,7 @@
 
 #include <gtest/gtest.h>
 #include "fs-helpers.h"
-#include "journalled-file.h"
+#include "wal-file.h"
 
 namespace {
 
@@ -21,7 +21,7 @@ public:
 protected:
 	void SetUp() override
 	{
-		jf = new FSHelpers::JournalledFile(JF_NAME);
+		jf = new FSHelpers::WALFile(JF_NAME);
 	}
 
 	void TearDown() override
@@ -45,8 +45,7 @@ public:
 		return statbuf.st_size;
 	}
 
-	void assert_delete_journal();
-	FSHelpers::JournalledFile *jf;
+	FSHelpers::WALFile *jf;
 };
 
 TEST_F(FSHelpersTest, testWriteFile) {

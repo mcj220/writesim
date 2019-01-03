@@ -16,7 +16,7 @@
 #include <fcntl.h>
 
 #include "fs-helpers.h"
-#include "journalled-file.h"
+#include "wal-file.h"
 
 #define MAX_FILESIZE 262144
 #define DEFAULT_REWRITE_PERCENT 10
@@ -72,7 +72,7 @@ namespace {
 		for(int i=0; i < nfiles; ++i) {
 			off_t filesz = rand() % max_filesize;
 
-			auto jf = FSHelpers::create<FSHelpers::JournalledFile>(make_fname(stemname, i));
+			auto jf = FSHelpers::create<FSHelpers::WALFile>(make_fname(stemname, i));
 			jf->writeFile(filesz);
 
 			data_written += filesz;
@@ -112,7 +112,7 @@ int main(int argc, char *argv[])
 		for(int i=0; i < num_files * rewrite_percent / 100; ++i) {
 			off_t filesz = rand() % max_filesize;
 
-			auto jf = FSHelpers::create<FSHelpers::JournalledFile>(make_fname(stemname, rand() % num_files));
+			auto jf = FSHelpers::create<FSHelpers::WALFile>(make_fname(stemname, rand() % num_files));
 			jf->writeFile(filesz);
 
 			data_written += filesz;

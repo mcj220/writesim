@@ -1,9 +1,9 @@
 GTEST_DIR := ../googletest/googletest
 
-WRITESIM_SRC := writesim.cc fs-helpers.cc
-TEST_SRC := journalled-file-test.cc journalled-file.cc $(GTEST_DIR)/src/gtest_main.cc
+WRITESIM_SRC := writesim.cc wal-file.cc
+TEST_SRC := wal-file-test.cc wal-file.cc json-file-test.cc $(GTEST_DIR)/src/gtest_main.cc
 
-HDR := fs-helpers.h journalled-file.h
+HDR := fs-helpers.h wal-file.h json-file.h
 
 TARGETS := writesim test
 
