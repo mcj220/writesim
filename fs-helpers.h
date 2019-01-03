@@ -1,8 +1,13 @@
 #pragma once
 
+#include <algorithm>
 #include <cstdlib>
+#include <fstream>
 #include <memory>
+#include <iostream>
 #include <string>
+#include <streambuf>
+
 #include <unistd.h>
 
 namespace FSHelpers {
@@ -15,19 +20,17 @@ enum {
 	WRITEFILE_USE_FSYNC=0x2,
 };
 
-static inline char *get_randbuf()
+static inline const std::string &get_randbuf()
 {
-	static char *randbuf = NULL;
+	static std::string randbuf;
 
-	if (randbuf == NULL) {
-		randbuf = new char[BUFLEN];
-		int urand = ::open("/dev/urandom", 0, O_RDONLY);
-		assert(urand != -1);
-		off_t off = 0;
-		do {
-			off += ::read(urand, &randbuf[off], BUFLEN - off);
-		} while (off < BUFLEN);
-		::close(urand);
+	if (randbuf.empty()) {
+		randbuf.reserve(BUFLEN);
+		std::ifstream urand("/dev/urandom", ::std::ios::binary);
+		assert(urand);
+		for(off_t i=0; i<BUFLEN; ++i) {
+			randbuf.push_back(urand.get() % ('Z' - 'A' + 1) + 'A');
+		}
 	}
 
 	return randbuf;
@@ -37,12 +40,24 @@ template<int F=WRITEFILE_USE_NONE> static const void writeFile_(const std::strin
 {
 	FILE *f = ::fopen(path.c_str(), "w");
 	assert(f != NULL);
+	assert(len >= 10);
+
+	// Wrap as JSON object
+	int r = ::fwrite("{\"d\":\"", 6, 1, f);
+	assert(r == 1);
+	len -= 9;
+
 	while (len > 0) {
 		off_t towrite = len > BUFLEN ? BUFLEN : len;
-		int r = ::fwrite(get_randbuf(), towrite, 1, f);
+		r = ::fwrite(get_randbuf().c_str(), towrite, 1, f);
 		assert(r == 1);
 		len -= towrite;
 	}
+
+	// JSON epilogue
+	r = ::fwrite("\"}\n", 3, 1, f);
+	assert(r == 1);
+
 	if (F & WRITEFILE_USE_FFLUSH) {
 		::fflush(f);
 	}
@@ -53,18 +68,15 @@ template<int F=WRITEFILE_USE_NONE> static const void writeFile_(const std::strin
 }
 
 enum class JournalState {
-	None,
-	First,
-	New,
-	Inconsistent
+	NONE,
+	INCOMPLETE,
+	RECOVERABLE
 };
 
 static inline std::ostream &operator<<(std::ostream &os, const JournalState state)
 {
-	os << (state == JournalState::First ? "first" :
-			state == JournalState::New ? "new" :
-				state == JournalState::Inconsistent ? "illegal" :
-					"none");
+	os << (state == JournalState::INCOMPLETE ? "first" :
+			state == JournalState::RECOVERABLE ? "new" : "none");
 	return os;
 }
 
@@ -94,11 +106,13 @@ public:
 	{
 		printStatus();
 
-		if (isJournalRecoverable()) {
-			doCommit();
+		if (isJournalDirty()) {
+			if (isJournalRecoverable()) {
+				doCommit();
+			} else {
+				doDeleteJournal();
+			}
 		}
-
-		doDeleteJournal();
 	}
 
 private:
@@ -110,14 +124,14 @@ private:
 protected:
 	const std::string &getPath() const { return m_path; }
 	bool hasData() const { return exists(getPath()); }
-	bool isJournalClosed() const { return !hasData(); }
-	bool isJournalDirty() const { return doGetJournalState() != JournalState::None; }
-	bool isJournalConsistent() const { return doGetJournalState() != JournalState::Inconsistent; }
-	bool isJournalRecoverable() const { return isJournalClosed() && doGetJournalState() == JournalState::New; }
+	bool isJournalDirty() const { return doGetJournalState() != JournalState::NONE; }
+	bool isJournalRecoverable() const { return doGetJournalState() == JournalState::RECOVERABLE; }
 
 public:
 	virtual void writeFile(off_t len) {
-		replayJournal();
+		if (isJournalDirty()) {
+			doDeleteJournal();
+		}
 		doWriteFile(len);
 		doCommit();
 	}

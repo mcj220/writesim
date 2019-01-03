@@ -27,12 +27,15 @@ private:
 	void doWriteFile(off_t len) override { 
 		writeFile_(getPath(), len);
 	}
-	void doDeleteJournal() override { /* empty */ }
+	void doDeleteJournal() override { ::remove(getPath().c_str()); }
 
 	JournalState doGetJournalState() const override {
-		return !exists(getPath()) ? JournalState::None :
-				checkJSON() ? JournalState::New :
-					JournalState::Inconsistent; }
+		JournalState result = JournalState::NONE;
+		if (hasData() && !checkJSON()) {
+			result = JournalState::INCOMPLETE;
+		}
+		return result;
+	}
 };
 
 } // namespace FSHelpers

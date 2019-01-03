@@ -17,11 +17,16 @@ namespace FSHelpers {
 
 JournalState WALFile::doGetJournalState() const
 {
-	return exists(firstPath()) ?
-		(exists(newPath()) ? JournalState::Inconsistent :
-			JournalState::First) :
-			exists(newPath()) ? JournalState::New :
-				JournalState::None;
+	JournalState result = JournalState::NONE;
+
+	if (exists(tempPath())) {
+		assert(!exists(walPath()));
+		result = JournalState::INCOMPLETE;
+	} else if (exists(walPath())) {
+		result = isJournalClosed() ? JournalState::RECOVERABLE : JournalState::INCOMPLETE;
+	}
+
+	return result;
 }
 
 void WALFile::moveFile(const std::string &path)
@@ -36,20 +41,20 @@ void WALFile::moveFile(const std::string &path)
 
 void WALFile::doDeleteJournal()
 {
-	::remove(firstPath().c_str());
-	::remove(newPath().c_str());
+	::remove(tempPath().c_str());
+	::remove(walPath().c_str());
 	//fsync of dir ...?
 }
 
 void WALFile::doCommit()
 {
 	assert(isJournalDirty());
-	assert(isJournalConsistent());
-	finalizeJournal();
-	if (doGetJournalState() == JournalState::New) {
-		moveFile(newPath());
+	assert(!exists(walPath()) || !exists(tempPath())); 
+	doCloseJournal();
+	if (doGetJournalState() == JournalState::RECOVERABLE) {
+		moveFile(walPath());
 	} else {
-		moveFile(firstPath());
+		moveFile(tempPath());
 	}
 }
 

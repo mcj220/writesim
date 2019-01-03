@@ -68,73 +68,71 @@ TEST_F(JSONTest, testCheckJSON) {
 	ASSERT_TRUE(FSHelpers::checkJSON(JF_NAME));
 	createBadJF();
 	ASSERT_FALSE(FSHelpers::checkJSON(JF_NAME));
+	jf->writeFile(1024);
+	ASSERT_TRUE(FSHelpers::checkJSON(JF_NAME));
 }
 
-TEST_F(JSONTest, testReplayJournal) {
-#if 0
-	FSHelpers::writeFile_(JF_NAME, 1);
+TEST_F(JSONTest, testReplayJournal_Recoverable) {
+	FSHelpers::writeFile_(JF_NAME, 11);
 	jf->replayJournal();
 	ASSERT_TRUE(FSHelpers::exists(JF_NAME));
-	ASSERT_FALSE(FSHelpers::exists(JF_FIRSTNAME));
-	ASSERT_FALSE(FSHelpers::exists(JF_NEWNAME));
-	ASSERT_EQ(getFileSize(JF_NAME), 1);
-	cleanupFiles();
+	ASSERT_EQ(getFileSize(JF_NAME), 11);
+}
 
-	FSHelpers::writeFile_(JF_FIRSTNAME, 2);
+TEST_F(JSONTest, testReplayJournal_Unrecoverable) {
+	createBadJF();
 	jf->replayJournal();
 	ASSERT_FALSE(FSHelpers::exists(JF_NAME));
-	ASSERT_FALSE(FSHelpers::exists(JF_FIRSTNAME));
-	ASSERT_FALSE(FSHelpers::exists(JF_NEWNAME));
-	cleanupFiles();
+}
 
-	FSHelpers::writeFile_(JF_NEWNAME, 3);
+#if 0
+	FSHelpers::writeFile_(JF_RECOVERABLENAME, 3);
 	jf->replayJournal();
 	ASSERT_TRUE(FSHelpers::exists(JF_NAME));
-	ASSERT_FALSE(FSHelpers::exists(JF_FIRSTNAME));
-	ASSERT_FALSE(FSHelpers::exists(JF_NEWNAME));
+	ASSERT_FALSE(FSHelpers::exists(JF_UNRECOVERABLENAME));
+	ASSERT_FALSE(FSHelpers::exists(JF_RECOVERABLENAME));
 	ASSERT_EQ(getFileSize(JF_NAME), 3);
 	cleanupFiles();
 
 	FSHelpers::writeFile_(JF_NAME, 1);
-	FSHelpers::writeFile_(JF_FIRSTNAME, 2);
+	FSHelpers::writeFile_(JF_UNRECOVERABLENAME, 2);
 	jf->replayJournal();
 	ASSERT_TRUE(FSHelpers::exists(JF_NAME));
-	ASSERT_FALSE(FSHelpers::exists(JF_FIRSTNAME));
-	ASSERT_FALSE(FSHelpers::exists(JF_NEWNAME));
+	ASSERT_FALSE(FSHelpers::exists(JF_UNRECOVERABLENAME));
+	ASSERT_FALSE(FSHelpers::exists(JF_RECOVERABLENAME));
 	ASSERT_EQ(getFileSize(JF_NAME), 1);
 	cleanupFiles();
 
 	FSHelpers::writeFile_(JF_NAME, 1);
-	FSHelpers::writeFile_(JF_NEWNAME, 2);
+	FSHelpers::writeFile_(JF_RECOVERABLENAME, 2);
 	jf->replayJournal();
 	ASSERT_TRUE(FSHelpers::exists(JF_NAME));
 	ASSERT_EQ(getFileSize(JF_NAME), 1);
-	ASSERT_FALSE(FSHelpers::exists(JF_FIRSTNAME));
-	ASSERT_FALSE(FSHelpers::exists(JF_NEWNAME));
+	ASSERT_FALSE(FSHelpers::exists(JF_UNRECOVERABLENAME));
+	ASSERT_FALSE(FSHelpers::exists(JF_RECOVERABLENAME));
 	cleanupFiles();
 
 	FSHelpers::writeFile_(JF_NAME, 1);
-	FSHelpers::writeFile_(JF_NEWNAME, 2);
-	FSHelpers::writeFile_(JF_FIRSTNAME, 3);
+	FSHelpers::writeFile_(JF_RECOVERABLENAME, 2);
+	FSHelpers::writeFile_(JF_UNRECOVERABLENAME, 3);
 	jf->replayJournal();
 	ASSERT_TRUE(FSHelpers::exists(JF_NAME));
 	ASSERT_EQ(getFileSize(JF_NAME), 1);
-	ASSERT_FALSE(FSHelpers::exists(JF_FIRSTNAME));
-	ASSERT_FALSE(FSHelpers::exists(JF_NEWNAME));
+	ASSERT_FALSE(FSHelpers::exists(JF_UNRECOVERABLENAME));
+	ASSERT_FALSE(FSHelpers::exists(JF_RECOVERABLENAME));
 	cleanupFiles();
 #endif
 
 #if 0
 	// Invalid state
-	FSHelpers::writeFile_(JF_NEWNAME, 2);
-	FSHelpers::writeFile_(JF_FIRSTNAME, 3);
+	FSHelpers::writeFile_(JF_RECOVERABLENAME, 2);
+	FSHelpers::writeFile_(JF_UNRECOVERABLENAME, 3);
 	jf->replayJournal();
 	ASSERT_TRUE(FSHelpers::exists(JF_NAME));
 	ASSERT_EQ(getFileSize(JF_NAME), 2);
-	ASSERT_FALSE(FSHelpers::exists(JF_FIRSTNAME));
-	ASSERT_FALSE(FSHelpers::exists(JF_NEWNAME));
+	ASSERT_FALSE(FSHelpers::exists(JF_UNRECOVERABLENAME));
+	ASSERT_FALSE(FSHelpers::exists(JF_RECOVERABLENAME));
 	cleanupFiles();
 #endif
-}
 
 } // anon

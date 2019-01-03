@@ -15,12 +15,13 @@ namespace {
 class FSHelpersTest : public ::testing::Test {
 public:
 	const std::string JF_NAME = "./t";
-	const std::string JF_FIRSTNAME = JF_NAME + ".first";
-	const std::string JF_NEWNAME = JF_NAME + ".new";
+	const std::string JF_TEMPNAME = JF_NAME + ".first";
+	const std::string JF_JOURNALNAME = JF_NAME + ".new";
 
 protected:
 	void SetUp() override
 	{
+		cleanupFiles();
 		jf = new FSHelpers::WALFile(JF_NAME);
 	}
 
@@ -34,8 +35,8 @@ public:
 	void cleanupFiles()
 	{
 		::remove(JF_NAME.c_str());
-		::remove(JF_FIRSTNAME.c_str());
-		::remove(JF_NEWNAME.c_str());
+		::remove(JF_TEMPNAME.c_str());
+		::remove(JF_JOURNALNAME.c_str());
 	}
 
 	off_t getFileSize(const std::string &path)
@@ -51,73 +52,54 @@ public:
 TEST_F(FSHelpersTest, testWriteFile) {
 	jf->writeFile(1024);
 	ASSERT_TRUE(FSHelpers::exists(JF_NAME));
-	ASSERT_FALSE(FSHelpers::exists(JF_FIRSTNAME));
-	ASSERT_FALSE(FSHelpers::exists(JF_NEWNAME));
+	ASSERT_FALSE(FSHelpers::exists(JF_TEMPNAME));
+	ASSERT_FALSE(FSHelpers::exists(JF_JOURNALNAME));
 }
 
-TEST_F(FSHelpersTest, testReplayJournal) {
-	FSHelpers::writeFile_(JF_NAME, 1);
+TEST_F(FSHelpersTest, testReplayJournal_CleanJournal) {
+	FSHelpers::writeFile_(JF_NAME, 11);
 	jf->replayJournal();
 	ASSERT_TRUE(FSHelpers::exists(JF_NAME));
-	ASSERT_FALSE(FSHelpers::exists(JF_FIRSTNAME));
-	ASSERT_FALSE(FSHelpers::exists(JF_NEWNAME));
-	ASSERT_EQ(getFileSize(JF_NAME), 1);
-	cleanupFiles();
+	ASSERT_FALSE(FSHelpers::exists(JF_TEMPNAME));
+	ASSERT_FALSE(FSHelpers::exists(JF_JOURNALNAME));
+	ASSERT_EQ(getFileSize(JF_NAME), 11);
+}
 
-	FSHelpers::writeFile_(JF_FIRSTNAME, 2);
+TEST_F(FSHelpersTest, testReplayJournal_TempClosed) {
+	FSHelpers::writeFile_(JF_TEMPNAME, 12);
 	jf->replayJournal();
 	ASSERT_FALSE(FSHelpers::exists(JF_NAME));
-	ASSERT_FALSE(FSHelpers::exists(JF_FIRSTNAME));
-	ASSERT_FALSE(FSHelpers::exists(JF_NEWNAME));
-	cleanupFiles();
+	ASSERT_FALSE(FSHelpers::exists(JF_TEMPNAME));
+	ASSERT_FALSE(FSHelpers::exists(JF_JOURNALNAME));
+}
 
-	FSHelpers::writeFile_(JF_NEWNAME, 3);
+TEST_F(FSHelpersTest, testReplayJournal_JournalClosed) {
+	FSHelpers::writeFile_(JF_JOURNALNAME, 13);
 	jf->replayJournal();
 	ASSERT_TRUE(FSHelpers::exists(JF_NAME));
-	ASSERT_FALSE(FSHelpers::exists(JF_FIRSTNAME));
-	ASSERT_FALSE(FSHelpers::exists(JF_NEWNAME));
-	ASSERT_EQ(getFileSize(JF_NAME), 3);
-	cleanupFiles();
+	ASSERT_FALSE(FSHelpers::exists(JF_TEMPNAME));
+	ASSERT_FALSE(FSHelpers::exists(JF_JOURNALNAME));
+	ASSERT_EQ(getFileSize(JF_NAME), 13);
+}
 
-	FSHelpers::writeFile_(JF_NAME, 1);
-	FSHelpers::writeFile_(JF_FIRSTNAME, 2);
+TEST_F(FSHelpersTest, testReplayJournal_TempOpen) {
+	FSHelpers::writeFile_(JF_NAME, 11);
+	FSHelpers::writeFile_(JF_TEMPNAME, 12);
 	jf->replayJournal();
 	ASSERT_TRUE(FSHelpers::exists(JF_NAME));
-	ASSERT_FALSE(FSHelpers::exists(JF_FIRSTNAME));
-	ASSERT_FALSE(FSHelpers::exists(JF_NEWNAME));
-	ASSERT_EQ(getFileSize(JF_NAME), 1);
-	cleanupFiles();
+	ASSERT_FALSE(FSHelpers::exists(JF_TEMPNAME));
+	ASSERT_FALSE(FSHelpers::exists(JF_JOURNALNAME));
+	ASSERT_EQ(getFileSize(JF_NAME), 11);
+}
 
-	FSHelpers::writeFile_(JF_NAME, 1);
-	FSHelpers::writeFile_(JF_NEWNAME, 2);
+TEST_F(FSHelpersTest, testReplayJournal_JournalOpen) {
+	FSHelpers::writeFile_(JF_NAME, 11);
+	FSHelpers::writeFile_(JF_JOURNALNAME, 12);
 	jf->replayJournal();
 	ASSERT_TRUE(FSHelpers::exists(JF_NAME));
-	ASSERT_EQ(getFileSize(JF_NAME), 1);
-	ASSERT_FALSE(FSHelpers::exists(JF_FIRSTNAME));
-	ASSERT_FALSE(FSHelpers::exists(JF_NEWNAME));
-	cleanupFiles();
-
-	FSHelpers::writeFile_(JF_NAME, 1);
-	FSHelpers::writeFile_(JF_NEWNAME, 2);
-	FSHelpers::writeFile_(JF_FIRSTNAME, 3);
-	jf->replayJournal();
-	ASSERT_TRUE(FSHelpers::exists(JF_NAME));
-	ASSERT_EQ(getFileSize(JF_NAME), 1);
-	ASSERT_FALSE(FSHelpers::exists(JF_FIRSTNAME));
-	ASSERT_FALSE(FSHelpers::exists(JF_NEWNAME));
-	cleanupFiles();
-
-#if 0
-	// Invalid state
-	FSHelpers::writeFile_(JF_NEWNAME, 2);
-	FSHelpers::writeFile_(JF_FIRSTNAME, 3);
-	jf->replayJournal();
-	ASSERT_TRUE(FSHelpers::exists(JF_NAME));
-	ASSERT_EQ(getFileSize(JF_NAME), 2);
-	ASSERT_FALSE(FSHelpers::exists(JF_FIRSTNAME));
-	ASSERT_FALSE(FSHelpers::exists(JF_NEWNAME));
-	cleanupFiles();
-#endif
+	ASSERT_EQ(getFileSize(JF_NAME), 11);
+	ASSERT_FALSE(FSHelpers::exists(JF_TEMPNAME));
+	ASSERT_FALSE(FSHelpers::exists(JF_JOURNALNAME));
 }
 
 } // anon
